@@ -1,5 +1,5 @@
 // Copyright 2018-2019 the Deno authors. All rights reserved. MIT license.
-import { BufReader } from "./bufio.ts";
+import { BufReader, UnexpectedEOFError } from "./bufio.ts";
 type Reader = Deno.Reader;
 type Writer = Deno.Writer;
 import { assert } from "../testing/asserts.ts";
