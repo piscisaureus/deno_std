@@ -3,8 +3,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-import { BufReader, BufState } from "../io/bufio.ts";
+import { BufReader, EOF, UnexpectedEOFError } from "../io/bufio.ts";
 import { charCode } from "../io/util.ts";
+import { fail } from "../testing/asserts.ts";
 
 const asciiDecoder = new TextDecoder();
 function str(buf: Uint8Array): string {
@@ -33,15 +34,18 @@ export function append(a: Uint8Array, b: Uint8Array): Uint8Array {
   }
 }
 
+export interface ReadLineResult {}
+
 export class TextProtoReader {
   constructor(readonly r: BufReader) {}
 
   /** readLine() reads a single line from the TextProtoReader,
    * eliding the final \n or \r\n from the returned string.
    */
-  async readLine(): Promise<[string, BufState]> {
-    let [line, err] = await this.readLineSlice();
-    return [str(line), err];
+  async readLine(): Promise<string | EOF> {
+    const s = await this.readLineSlice();
+    if (s === EOF) return EOF;
+    return str(s);
   }
 
   /** ReadMIMEHeader reads a MIME-style header from r.
@@ -64,29 +68,34 @@ export class TextProtoReader {
    *		"Long-Key": {"Even Longer Value"},
    *	}
    */
-  async readMIMEHeader(): Promise<[Headers, BufState]> {
+  async readMIMEHeader(): Promise<Headers | EOF> {
     let m = new Headers();
-    let line: Uint8Array;
+    let line: Uint8Array | EOF;
 
     // The first line cannot start with a leading space.
-    let [buf, err] = await this.r.peek(1);
+    // TODO(piscisaureus): this section looks fishy...
+    let buf = await this.r.peek(1);
+    if (buf === EOF) {
+      return EOF;
+    }
     if (buf[0] == charCode(" ") || buf[0] == charCode("\t")) {
-      [line, err] = await this.readLineSlice();
+      line = await this.readLineSlice();
     }
 
-    [buf, err] = await this.r.peek(1);
-    if (err == null && (buf[0] == charCode(" ") || buf[0] == charCode("\t"))) {
+    buf = await this.r.peek(1);
+    if (buf === EOF) {
+      //throw new UnexpectedEOFError();
+    } else if (buf[0] == charCode(" ") || buf[0] == charCode("\t")) {
       throw new ProtocolError(
-        `malformed MIME header initial line: ${str(line)}`
+        `malformed MIME header initial line: ${str(line as Uint8Array)}`
       );
     }
+    // TODO(piscisaureus): ...up to here.
 
     while (true) {
-      let [kv, err] = await this.readLineSlice(); // readContinuedLineSlice
-
-      if (kv.byteLength === 0) {
-        return [m, err];
-      }
+      let kv = await this.readLineSlice(); // readContinuedLineSlice
+      if (kv === EOF) throw new UnexpectedEOFError();
+      if (kv.byteLength === 0) return m;
 
       // Key ends at first colon; should not have trailing spaces
       // but they appear in the wild, violating specs, so we remove
@@ -125,29 +134,26 @@ export class TextProtoReader {
       try {
         m.append(key, value);
       } catch {}
-
-      if (err != null) {
-        throw err;
-      }
     }
   }
 
-  async readLineSlice(): Promise<[Uint8Array, BufState]> {
+  async readLineSlice(): Promise<Uint8Array | EOF> {
     // this.closeDot();
     let line: Uint8Array;
     while (true) {
-      let [l, more, err] = await this.r.readLine();
-      if (err != null) {
-        // Go's len(typed nil) works fine, but not in JS
-        return [new Uint8Array(0), err];
-      }
+      const lrl = await this.r.readLine();
+      if (lrl === EOF) return EOF;
+      const { line: l, more } = lrl;
 
       // Avoid the copy if the first call produced a full line.
-      if (line == null && !more) {
+      if (!line && !more) {
+        // TODO(ry):
+        // This skipSpace() is definitely misplaced, but I don't know where it
+        // comes from nor how to fix it.
         if (this.skipSpace(l) === 0) {
-          return [new Uint8Array(0), null];
+          return new Uint8Array(0);
         }
-        return [l, null];
+        return l;
       }
 
       line = append(line, l);
@@ -155,7 +161,7 @@ export class TextProtoReader {
         break;
       }
     }
-    return [line, null];
+    return line;
   }
 
   skipSpace(l: Uint8Array): number {
