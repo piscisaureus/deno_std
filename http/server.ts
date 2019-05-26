@@ -7,7 +7,7 @@ type Writer = Deno.Writer;
 import { BufReader, BufWriter, EOF, UnexpectedEOFError } from "../io/bufio.ts";
 import { TextProtoReader } from "../textproto/mod.ts";
 import { STATUS_TEXT } from "./http_status.ts";
-import { assert, fail } from "../testing/asserts.ts";
+import { assert } from "../testing/asserts.ts";
 import {
   collectUint8Arrays,
   deferred,

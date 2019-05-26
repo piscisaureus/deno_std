@@ -7,12 +7,7 @@
 
 const { Buffer } = Deno;
 import { test, runIfMain } from "../testing/mod.ts";
-import {
-  assert,
-  assertEquals,
-  assertNotEquals,
-  fail
-} from "../testing/asserts.ts";
+import { assert, assertEquals, assertNotEquals } from "../testing/asserts.ts";
 import {
   Response,
   ServerRequest,

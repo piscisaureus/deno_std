@@ -5,7 +5,6 @@
 
 import { BufReader, EOF, UnexpectedEOFError } from "../io/bufio.ts";
 import { charCode } from "../io/util.ts";
-import { fail } from "../testing/asserts.ts";
 
 const asciiDecoder = new TextDecoder();
 function str(buf: Uint8Array): string {
@@ -33,8 +32,6 @@ export function append(a: Uint8Array, b: Uint8Array): Uint8Array {
     return output;
   }
 }
-
-export interface ReadLineResult {}
 
 export class TextProtoReader {
   constructor(readonly r: BufReader) {}

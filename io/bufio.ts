@@ -8,7 +8,6 @@ type ReadResult = Deno.ReadResult;
 type Writer = Deno.Writer;
 import { charCode, copyBytes } from "./util.ts";
 import { assert } from "../testing/asserts.ts";
-const { assign } = Object;
 
 const DEFAULT_BUF_SIZE = 4096;
 const MIN_BUF_SIZE = 16;
