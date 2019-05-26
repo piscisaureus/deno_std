@@ -164,7 +164,7 @@ export class BufReader implements Reader {
    *
    * An error is thrown if some bytes could be read, but not enough to fill `p`
    * entirely before the underlying stream reported an error or EOF. Any error
-   * thrown, will have a `partial` property that indicates the slice of the
+   * thrown will have a `partial` property that indicates the slice of the
    * buffer that has been successfully filled with data
    *
    * Ported from https://golang.org/pkg/io/#ReadFull
