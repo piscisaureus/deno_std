@@ -67,24 +67,23 @@ export class TextProtoReader {
    */
   async readMIMEHeader(): Promise<Headers | EOF> {
     let m = new Headers();
-    let line: Uint8Array | EOF;
+    let line: Uint8Array;
 
     // The first line cannot start with a leading space.
     // TODO(piscisaureus): this section looks fishy...
     let buf = await this.r.peek(1);
     if (buf === EOF) {
       return EOF;
-    }
-    if (buf[0] == charCode(" ") || buf[0] == charCode("\t")) {
-      line = await this.readLineSlice();
+    } else if (buf[0] == charCode(" ") || buf[0] == charCode("\t")) {
+      line = (await this.readLineSlice()) as Uint8Array;
     }
 
     buf = await this.r.peek(1);
     if (buf === EOF) {
-      //throw new UnexpectedEOFError();
+      throw new UnexpectedEOFError();
     } else if (buf[0] == charCode(" ") || buf[0] == charCode("\t")) {
       throw new ProtocolError(
-        `malformed MIME header initial line: ${str(line as Uint8Array)}`
+        `malformed MIME header initial line: ${str(line)}`
       );
     }
     // TODO(piscisaureus): ...up to here.
