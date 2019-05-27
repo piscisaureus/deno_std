@@ -293,7 +293,7 @@ export class BufReader implements Reader {
    * being valid at the next read.
    *
    * If `readSlice()` encounters an error before finding a delimiter, or the
-   * buffer fills without finding a delimimiter, it throws an error with a
+   * buffer fills without finding a delimiter, it throws an error with a
    * `partial` property that contains the entire buffer.
    *
    * If `readSlice()` encounters the end of the underlying stream and there are
