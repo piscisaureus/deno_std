@@ -31,7 +31,7 @@ function chkOptions(opt: ParseOptions): void {
     INVALID_RUNE.includes(opt.comment) ||
     opt.comma === opt.comment
   ) {
-    throw Error("Invalid Delimiter");
+    throw new Error("Invalid Delimiter");
   }
 }
 
@@ -39,7 +39,7 @@ export async function read(
   Startline: number,
   reader: BufReader,
   opt: ParseOptions = { comma: ",", comment: "#", trimLeadingSpace: false }
-): Promise<string[] | typeof EOF> {
+): Promise<string[] | EOF> {
   const tp = new TextProtoReader(reader);
   let line: string;
   let result: string[] = [];
@@ -106,7 +106,6 @@ export async function readAll(
 ): Promise<string[][]> {
   const result: string[][] = [];
   let _nbFields: number;
-  // let err: BufState;
   let lineResult: string[];
   let first = true;
   let lineIndex = 0;

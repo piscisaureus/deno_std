@@ -137,9 +137,9 @@ export class TextProtoReader {
     // this.closeDot();
     let line: Uint8Array;
     while (true) {
-      const lrl = await this.r.readLine();
-      if (lrl === EOF) return EOF;
-      const { line: l, more } = lrl;
+      const r = await this.r.readLine();
+      if (r === EOF) return EOF;
+      const { line: l, more } = r;
 
       // Avoid the copy if the first call produced a full line.
       if (!line && !more) {

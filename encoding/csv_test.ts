@@ -439,7 +439,7 @@ for (const t of testCases) {
       }
       let actual;
       if (t.Error) {
-        let _err;
+        let err;
         try {
           actual = await readAll(new BufReader(new StringReader(t.Input)), {
             comma: comma,
@@ -449,10 +449,10 @@ for (const t of testCases) {
             lazyQuotes: lazyquote
           });
         } catch (e) {
-          _err = e;
+          err = e;
         }
-        assert(_err);
-        assertEquals(_err.message, t.Error);
+        assert(err);
+        assertEquals(err.message, t.Error);
       } else {
         actual = await readAll(new BufReader(new StringReader(t.Input)), {
           comma: comma,
