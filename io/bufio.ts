@@ -42,9 +42,9 @@ export class BufReader implements Reader {
   private rd: Reader; // Reader provided by caller.
   private r = 0; // buf read position.
   private w = 0; // buf write position.
-  private lastByte: number;
-  private lastCharSize: number;
   private eof = false;
+  // private lastByte: number;
+  // private lastCharSize: number;
 
   /** return new BufReader unless r is BufReader */
   static create(r: Reader, size = DEFAULT_BUF_SIZE): BufReader {
@@ -109,9 +109,9 @@ export class BufReader implements Reader {
   private _reset(buf: Uint8Array, rd: Reader): void {
     this.buf = buf;
     this.rd = rd;
-    this.lastByte = -1;
     this.eof = false;
-    // this.lastRuneSize = -1;
+    // this.lastByte = -1;
+    // this.lastCharSize = -1;
   }
 
   /** reads data into p.
@@ -130,10 +130,10 @@ export class BufReader implements Reader {
         // Read directly into p to avoid copy.
         const rr = await this.rd.read(p);
         assert(rr.nread >= 0, "negative read");
-        if (rr.nread > 0) {
-          this.lastByte = p[rr.nread - 1];
-          // this.lastRuneSize = -1;
-        }
+        // if (rr.nread > 0) {
+        //   this.lastByte = p[rr.nread - 1];
+        //   this.lastCharSize = -1;
+        // }
         return rr;
       }
 
@@ -150,8 +150,8 @@ export class BufReader implements Reader {
     // copy as much as we can
     rr.nread = copyBytes(p, this.buf.subarray(this.r, this.w), 0);
     this.r += rr.nread;
-    this.lastByte = this.buf[this.r - 1];
-    // this.lastRuneSize = -1;
+    // this.lastByte = this.buf[this.r - 1];
+    // this.lastCharSize = -1;
     return rr;
   }
 
@@ -198,7 +198,7 @@ export class BufReader implements Reader {
     }
     const c = this.buf[this.r];
     this.r++;
-    this.lastByte = c;
+    // this.lastByte = c;
     return c;
   }
 
@@ -346,11 +346,11 @@ export class BufReader implements Reader {
     }
 
     // Handle last byte, if any.
-    let i = slice.byteLength - 1;
-    if (i >= 0) {
-      this.lastByte = slice[i];
-      // this.lastRuneSize = -1
-    }
+    // const i = slice.byteLength - 1;
+    // if (i >= 0) {
+    //   this.lastByte = slice[i];
+    //   this.lastCharSize = -1
+    // }
 
     assert(slice instanceof Uint8Array);
     return slice;
