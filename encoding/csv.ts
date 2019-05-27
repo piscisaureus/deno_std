@@ -41,7 +41,6 @@ export async function read(
   opt: ParseOptions = { comma: ",", comment: "#", trimLeadingSpace: false }
 ): Promise<string[] | typeof EOF> {
   const tp = new TextProtoReader(reader);
-  // let err: BufState;
   let line: string;
   let result: string[] = [];
   let lineIndex = Startline;
@@ -114,7 +113,6 @@ export async function readAll(
   chkOptions(opt);
 
   for (;;) {
-    // [lineResult, err];
     const r = await read(lineIndex, reader, opt);
     if (r === EOF) break;
     lineResult = r;
@@ -139,8 +137,5 @@ export async function readAll(
       result.push(lineResult);
     }
   }
-  // if (err !== "EOF") {
-  //   return [result, err];
-  // }
   return result;
 }

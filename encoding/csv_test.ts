@@ -452,8 +452,6 @@ for (const t of testCases) {
           _err = e;
         }
         assert(_err);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        // const e: any = actual[1];
         assertEquals(_err.message, t.Error);
       } else {
         actual = await readAll(new BufReader(new StringReader(t.Input)), {
