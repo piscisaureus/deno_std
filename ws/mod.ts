@@ -4,7 +4,7 @@ import { decode, encode } from "../strings/mod.ts";
 
 type Conn = Deno.Conn;
 type Writer = Deno.Writer;
-import { BufReader, BufWriter } from "../io/bufio.ts";
+import { BufReader, BufWriter, EOF } from "../io/bufio.ts";
 import { readLong, readShort, sliceLongToBytes } from "../io/ioutil.ts";
 import { Sha1 } from "./sha1.ts";
 import { writeResponse } from "../http/server.ts";
@@ -130,8 +130,7 @@ export async function writeFrame(
   header = append(header, frame.payload);
   const w = BufWriter.create(writer);
   await w.write(header);
-  const err = await w.flush();
-  if (err) throw err;
+  await w.flush();
 }
 
 /** Read websocket frame from given BufReader */
@@ -442,14 +441,15 @@ export async function connectWebSocket(
   headerStr += "\r\n";
   await bufWriter.write(encode(headerStr));
   let err, statusLine, responseHeaders;
-  err = await bufWriter.flush();
-  if (err) {
+  try {
+    await bufWriter.flush();
+  } catch (err) {
     throw new Error("ws: failed to send handshake: " + err);
   }
   const tpReader = new TextProtoReader(bufReader);
-  [statusLine, err] = await tpReader.readLine();
-  if (err) {
-    abortHandshake(new Error("ws: failed to read status line: " + err));
+  statusLine = await tpReader.readLine();
+  if (statusLine === EOF) {
+    abortHandshake(new Error("ws: failed to read status line: EOF"));
   }
   const m = statusLine.match(/^(.+?) (.+?) (.+?)$/);
   if (!m) {
@@ -463,9 +463,9 @@ export async function connectWebSocket(
       )
     );
   }
-  [responseHeaders, err] = await tpReader.readMIMEHeader();
-  if (err) {
-    abortHandshake(new Error("ws: failed to parse response headers: " + err));
+  responseHeaders = await tpReader.readMIMEHeader();
+  if (responseHeaders === EOF) {
+    abortHandshake(new Error("ws: failed to parse response headers: EOF"));
   }
   const expectedSecAccept = createSecAccept(key);
   const secAccept = responseHeaders.get("sec-websocket-accept");

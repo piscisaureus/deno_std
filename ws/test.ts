@@ -121,7 +121,7 @@ test(async function wsReadUnmaskedBigBinaryFrame(): Promise<void> {
 
 test(async function wsReadUnmaskedBigBigBinaryFrame(): Promise<void> {
   const a = [0x82, 0x7f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00];
-  for (let i = 0; i < 0xffff; i++) {
+  for (let i = 0; i < 0xffff + 1; i++) {
     a.push(i);
   }
   const buf = new BufReader(new Buffer(new Uint8Array(a)));
