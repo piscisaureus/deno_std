@@ -10,10 +10,12 @@ import * as bytes from "../bytes/mod.ts";
 import { copyN } from "../io/ioutil.ts";
 import { MultiReader } from "../io/readers.ts";
 import { tempFile } from "../io/util.ts";
-import { BufReader, BufState, BufWriter } from "../io/bufio.ts";
+import { BufReader, BufWriter, EOF, UnexpectedEOFError } from "../io/bufio.ts";
 import { TextProtoReader } from "../textproto/mod.ts";
 import { encoder } from "../strings/mod.ts";
 import * as path from "../fs/path.ts";
+
+const EMPTY_BUF = new Uint8Array(0);
 
 function randomBoundary(): string {
   let boundary = "--------------------------";
@@ -26,10 +28,10 @@ function randomBoundary(): string {
 export function matchAfterPrefix(
   a: Uint8Array,
   prefix: Uint8Array,
-  bufState: BufState
-): number {
+  eof: boolean
+): -1 | 0 | 1 {
   if (a.length === prefix.length) {
-    if (bufState) {
+    if (eof) {
       return 1;
     }
     return 0;
@@ -52,43 +54,46 @@ export function scanUntilBoundary(
   dashBoundary: Uint8Array,
   newLineDashBoundary: Uint8Array,
   total: number,
-  state: BufState
-): [number, BufState] {
+  eof: boolean
+): number | EOF {
   if (total === 0) {
     if (bytes.hasPrefix(buf, dashBoundary)) {
-      switch (matchAfterPrefix(buf, dashBoundary, state)) {
+      switch (matchAfterPrefix(buf, dashBoundary, eof)) {
         case -1:
-          return [dashBoundary.length, null];
+          return dashBoundary.length;
         case 0:
-          return [0, null];
+          return 0;
         case 1:
-          return [0, "EOF"];
-      }
-      if (bytes.hasPrefix(dashBoundary, buf)) {
-        return [0, state];
+          return EOF;
       }
     }
+    if (bytes.hasPrefix(dashBoundary, buf)) {
+      return 0;
+    }
   }
+
   const i = bytes.findIndex(buf, newLineDashBoundary);
   if (i >= 0) {
-    switch (matchAfterPrefix(buf.slice(i), newLineDashBoundary, state)) {
+    switch (matchAfterPrefix(buf.slice(i), newLineDashBoundary, eof)) {
       case -1:
         // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-        return [i + newLineDashBoundary.length, null];
+        return i + newLineDashBoundary.length;
       case 0:
-        return [i, null];
+        return i;
       case 1:
-        return [i, "EOF"];
+        return i === 0 && eof ? EOF : i;
     }
   }
   if (bytes.hasPrefix(newLineDashBoundary, buf)) {
-    return [0, state];
+    return 0;
   }
+
   const j = bytes.findLastIndex(buf, newLineDashBoundary.slice(0, 1));
   if (j >= 0 && bytes.hasPrefix(newLineDashBoundary, buf.slice(j))) {
-    return [j, null];
+    return j;
   }
-  return [buf.length, state];
+
+  return buf.length === 0 && this.eof ? EOF : buf.length;
 }
 
 let i = 0;
@@ -96,56 +101,54 @@ let i = 0;
 class PartReader implements Reader, Closer {
   n: number = 0;
   total: number = 0;
-  bufState: BufState = null;
+  eof: boolean = false;
   index = i++;
 
   constructor(private mr: MultipartReader, public readonly headers: Headers) {}
 
   async read(p: Uint8Array): Promise<ReadResult> {
     const br = this.mr.bufReader;
-    const returnResult = (nread: number, bufState: BufState): ReadResult => {
-      if (bufState && bufState !== "EOF") {
-        throw bufState;
-      }
-      return { nread, eof: bufState === "EOF" };
-    };
-    if (this.n === 0 && !this.bufState) {
-      const [peek] = await br.peek(br.buffered());
-      const [n, state] = scanUntilBoundary(
-        peek,
-        this.mr.dashBoundary,
-        this.mr.newLineDashBoundary,
-        this.total,
-        this.bufState
-      );
-      this.n = n;
-      this.bufState = state;
-      if (this.n === 0 && !this.bufState) {
+    const returnResult = nread => (nread === 0 && this.eof ? EOF : nread);
+    if (this.n === 0 && !this.eof) {
+      const peek = await br.peek(br.buffered());
+      if (peek === EOF) {
+        this.eof = true;
+      } else {
+        const n = scanUntilBoundary(
+          peek,
+          this.mr.dashBoundary,
+          this.mr.newLineDashBoundary,
+          this.total,
+          false
+        );
+        if (n === EOF) throw new UnexpectedEOFError();
+        this.n = n;
+
         // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-        const [, state] = await br.peek(peek.length + 1);
-        this.bufState = state;
-        if (this.bufState === "EOF") {
-          this.bufState = new RangeError("unexpected eof");
+        if (
+          this.n === 0 &&
+          !this.eof &&
+          (await br.peek(peek.length + 1)) === EOF
+        ) {
+          this.eof = true;
+          throw new UnexpectedEOFError();
         }
       }
     }
     if (this.n === 0) {
-      return returnResult(0, this.bufState);
+      return returnResult(0);
     }
 
-    let n = 0;
-    if (p.byteLength > this.n) {
-      n = this.n;
+    if (p.length < this.n) {
+      return returnResult(0);
     }
-    const buf = p.slice(0, n);
-    const [nread] = await this.mr.bufReader.readFull(buf);
-    p.set(buf);
-    this.total += nread;
-    this.n -= nread;
-    if (this.n === 0) {
-      return returnResult(n, this.bufState);
-    }
-    return returnResult(n, null);
+    const n = this.n;
+    const buf = p.subarray(0, n);
+    const r = await this.mr.bufReader.readFull(buf);
+    if (r === EOF) throw new UnexpectedEOFError();
+    this.total += n;
+    this.n -= n;
+    return returnResult(n);
   }
 
   close(): void {}
@@ -212,7 +215,7 @@ export class MultipartReader {
   readonly dashBoundary = encoder.encode(`--${this.boundary}`);
   readonly bufReader: BufReader;
 
-  constructor(private reader: Reader, private boundary: string) {
+  constructor(reader: Reader, private boundary: string) {
     this.bufReader = new BufReader(reader);
   }
 
@@ -228,6 +231,7 @@ export class MultipartReader {
     const buf = new Buffer(new Uint8Array(maxValueBytes));
     for (;;) {
       const p = await this.nextPart();
+      console.error(p);
       if (!p) {
         break;
       }
@@ -277,7 +281,7 @@ export class MultipartReader {
           filename: p.fileName,
           type: p.headers.get("content-type"),
           content: buf.bytes(),
-          size: buf.bytes().byteLength
+          size: buf.bytes().length
         };
         maxMemory -= n;
         maxValueBytes -= n;
@@ -291,6 +295,7 @@ export class MultipartReader {
   private partsRead: number;
 
   private async nextPart(): Promise<PartReader> {
+    console.error("PART\n");
     if (this.currentPart) {
       this.currentPart.close();
     }
@@ -299,19 +304,20 @@ export class MultipartReader {
     }
     let expectNewPart = false;
     for (;;) {
-      const [line, state] = await this.bufReader.readSlice("\n".charCodeAt(0));
-      if (state === "EOF" && this.isFinalBoundary(line)) {
-        break;
-      }
-      if (state) {
-        throw new Error(`aa${state.toString()}`);
+      const line = await this.bufReader.readSlice("\n".charCodeAt(0));
+      if (line === EOF) {
+        if (this.isFinalBoundary(EMPTY_BUF)) {
+          break;
+        } else {
+          throw new UnexpectedEOFError();
+        }
       }
       if (this.isBoundaryDelimiterLine(line)) {
         this.partsRead++;
         const r = new TextProtoReader(this.bufReader);
-        const [headers, state] = await r.readMIMEHeader();
-        if (state) {
-          throw state;
+        const headers = await r.readMIMEHeader();
+        if (headers === EOF) {
+          throw new UnexpectedEOFError();
         }
         const np = new PartReader(this, headers);
         this.currentPart = np;
@@ -330,7 +336,8 @@ export class MultipartReader {
         expectNewPart = true;
         continue;
       }
-      throw new Error(`unexpected line in next(): ${line}`);
+      let l2 = [...line].map(c => String.fromCharCode(c)).join("");
+      throw new Error(`unexpected line in next(): ${l2}`);
     }
   }
 
@@ -478,7 +485,7 @@ export class MultipartWriter {
     await copy(f, file);
   }
 
-  private flush(): Promise<BufState> {
+  private flush(): Promise<void> {
     return this.bufWriter.flush();
   }
 
