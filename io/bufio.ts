@@ -352,7 +352,6 @@ export class BufReader implements Reader {
     //   this.lastCharSize = -1
     // }
 
-    assert(slice instanceof Uint8Array);
     return slice;
   }
 
